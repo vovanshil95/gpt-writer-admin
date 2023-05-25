@@ -53,6 +53,7 @@ def get_questions():
 @app.put('/api/questions')
 def put_questions(questions: list[MatchSchema]) -> ResponseMatch:
     with sqlalchemy_session.begin() as session:
+        session.query(Match).delete()
         session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color), questions))
     return {'status': 'success', 'message': 'Questions successfully saved', 'data': questions}
 

@@ -60,14 +60,7 @@ filled_prompt = Table('filled_prompt',
                Column('text_data', String, nullable=False),
                Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id'), nullable=False),)
 
-match_prompt_blank = Table('match_prompt_blank',
-                              metadata,
-                              Column('match_id', UUID, ForeignKey('match.id'), primary_key=True),
-                              Column('prompt_blank_id', UUID, ForeignKey('prompt_blank.id'), primary_key=True),)
-
-
 mapper_registry.map_imperatively(Match, match)
 mapper_registry.map_imperatively(PromptBlank, prompt_blank)
 mapper_registry.map_imperatively(GptInteraction, gpt_interaction)
 mapper_registry.map_imperatively(FilledPrompt, filled_prompt)
-mapper_registry.map_imperatively(MatchPromptBlank, match_prompt_blank)
