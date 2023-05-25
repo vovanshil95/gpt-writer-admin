@@ -12,4 +12,4 @@ DB_PASS = os.environ['DB_PASS']
 
 OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
 
-sqlalchemy_url = f'postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+sqlalchemy_url = f'postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}?client_encoding=utf8'
