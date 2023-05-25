@@ -12,11 +12,12 @@ class BaseResponse(BaseModel):
     message: str
     data: dict
 
-class QuestionSchema(BaseModel):
+class MatchSchema(BaseModel):
     id: uuid.UUID
     question: str
-class ResponseQuestions(BaseResponse):
-    data: list[QuestionSchema]
+    answer: str
+class ResponseMatch(BaseResponse):
+    data: list[MatchSchema]
 
 class PromptsSchema(BaseModel):
     prompt: list[str]
@@ -45,15 +46,14 @@ openai.api_key = OPENAI_API_KEY
 @app.get('/api/questions')
 def get_questions():
     with sqlalchemy_session.begin() as session:
-        questions = session.query(Question).all()
-        questions = list(map(lambda q: {'id': str(q.id), 'text_data': q.text_data}, questions))
-    print({'status': 'success', 'message': 'Questions successfully retrieved', 'data': questions})
-    return {'status': 'success', 'message': 'Questions successfully retrieved', 'data': questions}
+        matches = session.query(Match).all()
+        matches = list(map(lambda m: {'id': str(m.id), 'question': m.question, 'answer': m.answer, 'color': m.color}, matches))
+    return {'status': 'success', 'message': 'Questions successfully retrieved', 'data': matches}
 
 @app.put('/api/questions')
-def put_questions(questions: list[QuestionSchema]) -> ResponseQuestions:
+def put_questions(questions: list[MatchSchema]) -> ResponseMatch:
     with sqlalchemy_session.begin() as session:
-        session.add_all(map(lambda q: Question(q.id, q.question), questions))
+        session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color), questions))
     return {'status': 'success', 'message': 'Questions successfully saved', 'data': questions}
 
 
@@ -78,7 +78,7 @@ def get_history():
         history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data))\
             .join(FilledPrompt).group_by(GptInteraction.id).all()
         history = list(map(lambda el: {'prompt': el[1],
-                                       'gpr_response': el[0].gpt_answer,
+                                       'gpt_response': el[0].gpt_answer,
                                        'datetime': el[0].time_happened}, history))
     return {"status": "success", "message": "History successfully retrieved", 'data': history}
 

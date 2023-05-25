@@ -5,13 +5,14 @@ import datetime
 import uuid
 
 metadata = MetaData()
-
 mapper_registry = registry()
 
-class Question:
-    def __init__(self, id: uuid.UUID, text_data: str):
+class Match:
+    def __init__(self, id: uuid.UUID, question: str, answer: str, color: str):
         self.id = id
-        self.text_data = text_data
+        self.question = question
+        self.answer = answer
+        self.color = color
 
 class PromptBlank:
     def __init__(self, id: uuid.UUID, text_data: str):
@@ -30,15 +31,17 @@ class GptInteraction:
         self.gpt_answer = gpt_answer
         self.time_happened = time_happened
 
-class QuestionPromptBlank:
-    def __init__(self, question_id: uuid.UUID, prompt_blank_id: uuid.UUID):
-        self.question_id = question_id
+class MatchPromptBlank:
+    def __init__(self, match_id: uuid.UUID, prompt_blank_id: uuid.UUID):
+        self.match_id = match_id
         self.prompt_blank_id = prompt_blank_id
 
-question = Table('question',
+match = Table('match',
                  metadata,
                  Column('id', UUID, primary_key=True),
-                 Column('text_data', String, nullable=False),)
+                 Column('question', String, nullable=False),
+                 Column('answer', String),
+                 Column('color', String, nullable=False),)
 
 prompt_blank = Table('prompt_blank',
                metadata,
@@ -57,14 +60,14 @@ filled_prompt = Table('filled_prompt',
                Column('text_data', String, nullable=False),
                Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id'), nullable=False),)
 
-question_prompt_blank = Table('question_prompt_blank',
+match_prompt_blank = Table('match_prompt_blank',
                               metadata,
-                              Column('question_id', UUID, ForeignKey('question.id'), primary_key=True),
+                              Column('match_id', UUID, ForeignKey('match.id'), primary_key=True),
                               Column('prompt_blank_id', UUID, ForeignKey('prompt_blank.id'), primary_key=True),)
 
 
-mapper_registry.map_imperatively(Question, question)
+mapper_registry.map_imperatively(Match, match)
 mapper_registry.map_imperatively(PromptBlank, prompt_blank)
 mapper_registry.map_imperatively(GptInteraction, gpt_interaction)
 mapper_registry.map_imperatively(FilledPrompt, filled_prompt)
-mapper_registry.map_imperatively(QuestionPromptBlank, question_prompt_blank)
+mapper_registry.map_imperatively(MatchPromptBlank, match_prompt_blank)
