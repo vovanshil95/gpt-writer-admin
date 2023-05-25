@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
@@ -54,6 +55,16 @@ app = FastAPI()
 
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
 openai.api_key = OPENAI_API_KEY
+
+origins = ['*']
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 @app.get('/api/questions')
 def get_questions() -> MatchResponse:
