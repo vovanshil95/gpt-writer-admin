@@ -36,6 +36,17 @@ class MatchPromptBlank:
         self.match_id = match_id
         self.prompt_blank_id = prompt_blank_id
 
+class FavoritePrompt:
+    def __init__(self, id: UUID, title: str):
+        self.id = id
+        self.title = title
+
+class FavoritePromptBlank:
+    def __init__(self, id: UUID, favorite_prompt_id: UUID, text_data: str):
+        self.id = id
+        self.favorite_prompt_id = favorite_prompt_id
+        self.text_data = text_data
+
 match = Table('match',
                  metadata,
                  Column('id', UUID, primary_key=True),
@@ -60,7 +71,20 @@ filled_prompt = Table('filled_prompt',
                Column('text_data', String, nullable=False),
                Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id'), nullable=False),)
 
+favorite_prompt = Table('favorite_prompt',
+                        metadata,
+                        Column('id', UUID, primary_key=True),
+                        Column('title', String, nullable=False),)
+
+favorite_prompt_blank = Table('favorite_prompt_blank',
+                              metadata,
+                              Column('id', UUID, primary_key=True),
+                              Column('favorite_prompt_id', UUID, ForeignKey('favorite_prompt.id')),
+                              Column('text_data', String),)
+
 mapper_registry.map_imperatively(Match, match)
 mapper_registry.map_imperatively(PromptBlank, prompt_blank)
 mapper_registry.map_imperatively(GptInteraction, gpt_interaction)
 mapper_registry.map_imperatively(FilledPrompt, filled_prompt)
+mapper_registry.map_imperatively(FavoritePrompt, favorite_prompt)
+mapper_registry.map_imperatively(FavoritePromptBlank, favorite_prompt_blank)
