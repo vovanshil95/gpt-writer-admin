@@ -56,14 +56,14 @@ app = FastAPI()
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
 openai.api_key = OPENAI_API_KEY
 
-origins = ['*']
+origins = ["http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get('/api/questions')
