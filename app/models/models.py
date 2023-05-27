@@ -26,9 +26,11 @@ class FilledPrompt:
         self.gpt_interaction_id = gpt_interaction_id
 
 class GptInteraction:
-    def __init__(self, id: uuid.UUID, gpt_answer: str, time_happened: datetime.datetime):
+    def __init__(self, id: uuid.UUID, gpt_answer: str, username: str, company: str, time_happened: datetime.datetime):
         self.id = id
         self.gpt_answer = gpt_answer
+        self.username = username
+        self.company = company
         self.time_happened = time_happened
 
 class MatchPromptBlank:
@@ -63,6 +65,8 @@ gpt_interaction = Table('gpt_interaction',
                         metadata,
                         Column('id', UUID, primary_key=True),
                         Column('gpt_answer', String, nullable=False),
+                        Column('username', String, nullable=False),
+                        Column('company', String, nullable=False),
                         Column('time_happened', TIMESTAMP, nullable=False),)
 
 filled_prompt = Table('filled_prompt',

@@ -26,18 +26,11 @@ class MatchSchema(BaseModel):
 class MatchResponse(BaseResponse):
     data: list[MatchSchema]
 
-class PromptsSchema(BaseModel):
+class PromptBlanksSchema(BaseModel):
     prompt: list[str]
+
 class PromptsResponse(BaseResponse):
-    data: PromptsSchema
-
-class InteractionSchema(BaseModel):
-    prompt: list[str]
-    gpt_response: str
-    datetime: datetime.datetime
-
-class InteractionsResponse(BaseResponse):
-    data: list[InteractionSchema]
+    data: PromptBlanksSchema
 
 class GptAnswerSchema(BaseModel):
     gpt_response: str
@@ -45,13 +38,26 @@ class GptAnswerSchema(BaseModel):
 class GptAnswerResponse(BaseResponse):
     data: GptAnswerSchema
 
-class FavoritePromptShema(BaseModel):
+class FavoritePromptSchema(BaseModel):
     id: uuid.UUID
     title: str
     prompt: list[str]
 
 class FavoritePromptResponse(BaseResponse):
-    data: list[FavoritePromptShema]
+    data: list[FavoritePromptSchema]
+
+class GptRequestSchema(BaseModel):
+    prompt: list[str]
+    username: str
+    company: str
+    datetime: datetime.datetime
+
+class InteractionSchema(BaseModel):
+    request: GptRequestSchema
+    gpt_response: str
+
+class InteractionsResponse(BaseResponse):
+    data: list[InteractionSchema]
 
 app = FastAPI()
 
@@ -98,12 +104,12 @@ def put_questions(questions: list[MatchSchema]) -> MatchResponse:
 def get_prompt() -> PromptsResponse:
     with sqlalchemy_session.begin() as session:
         prompts = session.query(PromptBlank).all()
-        prompts = PromptsSchema(prompt=list(map(lambda q: q.text_data, prompts)))
+        prompts = PromptBlanksSchema(prompt=list(map(lambda q: q.text_data, prompts)))
     return {'status': 'success', 'message': 'Prompt successfully retrieved', 'data': prompts}
 
 
 @app.put('/api/prompt')
-def put_prompt(prompts: PromptsSchema) -> PromptsResponse:
+def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
     with sqlalchemy_session.begin() as session:
         session.query(PromptBlank).delete()
         session.add_all(list(map(lambda pr: PromptBlank(uuid.UUID(hex=str(uuid.uuid4())), pr), prompts.prompt)))
@@ -115,21 +121,26 @@ def get_history() -> InteractionsResponse:
     with sqlalchemy_session.begin() as session:
         history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data))\
             .join(FilledPrompt).group_by(GptInteraction.id).all()
-        history = list(map(lambda el: InteractionSchema(prompt=el[1],
-                                                        gpt_response=el[0].gpt_answer,
-                                                        datetime=el[0].time_happened), history))
+        history = list(map(lambda el: InteractionSchema(
+            request=GptRequestSchema(
+                prompt=el[1],
+                username=el[0].username,
+                company=el[0].company,
+                datetime=el[0].time_happened
+            ),
+            gpt_response=el[0].gpt_answer), history))
     return {'status': 'success', 'message': 'History successfully retrieved', 'data': history}
 
 
 @app.post('/api/response')
-def get_response(prompts: list[str]) -> GptAnswerResponse:
-    response = openai.ChatCompletion.create(model='gpt-4', messages=[{'role': 'user', 'content': '\n'.join(prompts)}])
+def get_response(request: GptRequestSchema) -> GptAnswerResponse:
+    response = openai.ChatCompletion.create(model='gpt-4', messages=[{'role': 'user', 'content': '\n'.join(request.prompt)}])
     answer = response['choices'][0]['message']['content']
     interaction_id = uuid.UUID(hex=str(uuid.uuid4()))
     with sqlalchemy_session.begin() as session:
-        session.add(GptInteraction(interaction_id, answer, datetime.datetime.now()))
+        session.add(GptInteraction(interaction_id, answer, request.username, request.company, datetime.datetime.now()))
         session.flush()
-        session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), prompts))
+        session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), request.prompt))
     return {'status': 'success', 'message': 'GPT Respons successfully retrieved', 'data': {'gpt_response': answer}}
 
 @app.get('/api/favoritesPrompts')
@@ -137,13 +148,13 @@ def get_favorite_prompts() -> FavoritePromptResponse:
     with sqlalchemy_session.begin() as session:
         favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
             .join(FavoritePromptBlank).group_by(FavoritePrompt.id).all()
-        favorite_prompts = list(map(lambda p: FavoritePromptShema(id=p[0].id,
+        favorite_prompts = list(map(lambda p: FavoritePromptSchema(id=p[0].id,
                                                                   title=p[0].title,
                                                                   prompt=p[1]), favorite_prompts))
     return {'status': 'success', 'message': 'Favorite prompts successfully retrieved', 'data': favorite_prompts}
 
 @app.post('/api/favoritesPrompts')
-def post_favorite_prompts(prompts: list[FavoritePromptShema]) -> FavoritePromptResponse:
+def post_favorite_prompts(prompts: list[FavoritePromptSchema]) -> FavoritePromptResponse:
     with sqlalchemy_session.begin() as session:
         session.add_all(map(lambda p: FavoritePrompt(id=p.id, title=p.title), prompts))
         session.flush()
