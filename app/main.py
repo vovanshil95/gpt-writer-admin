@@ -50,10 +50,10 @@ class GptRequestSchema(BaseModel):
     prompt: list[str]
     username: str
     company: str
-    datetime: datetime.datetime
 
 class InteractionSchema(BaseModel):
     request: GptRequestSchema
+    datetime: datetime.datetime
     gpt_response: str
 
 class InteractionsResponse(BaseResponse):
@@ -126,8 +126,8 @@ def get_history() -> InteractionsResponse:
                 prompt=el[1],
                 username=el[0].username,
                 company=el[0].company,
-                datetime=el[0].time_happened
             ),
+            datetime=el[0].time_happened,
             gpt_response=el[0].gpt_answer), history))
     return {'status': 'success', 'message': 'History successfully retrieved', 'data': history}
 
