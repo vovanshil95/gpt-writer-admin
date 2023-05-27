@@ -2,6 +2,8 @@ import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
@@ -56,15 +58,23 @@ app = FastAPI()
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
 openai.api_key = OPENAI_API_KEY
 
-origins = ["http://localhost:3000"]
+origins = ['http://localhost:3000']
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
+
+REQUEST_VALIDATION_ERROR_STATUS = 422
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request, exc):
+    return JSONResponse(status_code=REQUEST_VALIDATION_ERROR_STATUS,
+                        content={'status': 'error', 'message': exc.errors()[0]['msg']})
+
 
 @app.get('/api/questions')
 def get_questions() -> MatchResponse:
@@ -108,7 +118,7 @@ def get_history() -> InteractionsResponse:
         history = list(map(lambda el: InteractionSchema(prompt=el[1],
                                                         gpt_response=el[0].gpt_answer,
                                                         datetime=el[0].time_happened), history))
-    return {"status": "success", "message": "History successfully retrieved", 'data': history}
+    return {'status': 'success', 'message': 'History successfully retrieved', 'data': history}
 
 
 @app.post('/api/response')
