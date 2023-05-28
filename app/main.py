@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 import openai
 
 from models.models import *
-from config import sqlalchemy_url, OPENAI_API_KEY
+from config import sqlalchemy_url, OPENAI_API_KEY, ORIGINS
 
 class BaseResponse(BaseModel):
     status: str
@@ -64,11 +64,9 @@ app = FastAPI()
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
 openai.api_key = OPENAI_API_KEY
 
-origins = ['http://localhost:3000']
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=ORIGINS,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
