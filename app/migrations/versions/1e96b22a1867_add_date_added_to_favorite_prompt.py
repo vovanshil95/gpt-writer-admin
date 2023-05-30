@@ -5,15 +5,9 @@ Revises: 8529cf42bb11
 Create Date: 2023-05-30 18:34:22.316715
 
 """
-import time
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import create_engine, text, insert, UUID, TIMESTAMP, String
-from sqlalchemy.orm import sessionmaker
-
-from models.models import FavoritePrompt
-from config import sqlalchemy_url
 
 import datetime
 from zoneinfo import ZoneInfo
@@ -25,10 +19,8 @@ down_revision = '8529cf42bb11'
 branch_labels = None
 depends_on = None
 
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
-
 def upgrade() -> None:
-    op.add_column('favorite_prompt', sa.Column('date_added', sa.TIMESTAMP(), nullable=False, server_default=str(datetime.datetime.now())))
+    op.add_column('favorite_prompt', sa.Column('date_added', sa.TIMESTAMP(), nullable=False, server_default=str(datetime.datetime.now(ZoneInfo('Europe/Moscow')))))
     op.alter_column('favorite_prompt', 'date_added', server_default=None)
 
 
