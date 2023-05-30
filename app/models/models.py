@@ -39,9 +39,10 @@ class MatchPromptBlank:
         self.prompt_blank_id = prompt_blank_id
 
 class FavoritePrompt:
-    def __init__(self, id: uuid.UUID, title: str):
+    def __init__(self, id: uuid.UUID, title: str, date_added: datetime.datetime):
         self.id = id
         self.title = title
+        self.date_added = date_added
 
 class FavoritePromptBlank:
     def __init__(self, id: uuid.UUID, favorite_prompt_id: UUID, text_data: str):
@@ -73,17 +74,18 @@ filled_prompt = Table('filled_prompt',
                metadata,
                Column('id', UUID, primary_key=True),
                Column('text_data', String, nullable=False),
-               Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id'), nullable=False),)
+               Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id', ondelete='cascade'), nullable=False),)
 
 favorite_prompt = Table('favorite_prompt',
                         metadata,
                         Column('id', UUID, primary_key=True),
-                        Column('title', String, nullable=False),)
+                        Column('title', String, nullable=False),
+                        Column('date_added', TIMESTAMP, nullable=False),)
 
 favorite_prompt_blank = Table('favorite_prompt_blank',
                               metadata,
                               Column('id', UUID, primary_key=True),
-                              Column('favorite_prompt_id', UUID, ForeignKey('favorite_prompt.id')),
+                              Column('favorite_prompt_id', UUID, ForeignKey('favorite_prompt.id', ondelete='cascade')),
                               Column('text_data', String),)
 
 mapper_registry.map_imperatively(Match, match)

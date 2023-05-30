@@ -1,12 +1,15 @@
 import uuid
+import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine, func, desc
 from sqlalchemy.orm import sessionmaker
+from  sqlalchemy.exc import IntegrityError
 import openai
 
 from models.models import *
@@ -43,8 +46,17 @@ class FavoritePromptSchema(BaseModel):
     title: str
     prompt: list[str]
 
+class FavoritePromptTimeSchema(FavoritePromptSchema):
+    date_added: datetime.datetime
+
+class FavoritePromptsTimeResponse(BaseResponse):
+    data: list[FavoritePromptTimeSchema]
+
 class FavoritePromptResponse(BaseResponse):
-    data: list[FavoritePromptSchema]
+    data: FavoritePromptSchema
+
+class FavoritePromptTimeResponse(BaseResponse):
+    data: FavoritePromptTimeSchema
 
 class GptRequestSchema(BaseModel):
     prompt: list[str]
@@ -73,11 +85,22 @@ app.add_middleware(
 )
 
 REQUEST_VALIDATION_ERROR_STATUS = 422
+ENTITY_ERROR_STATUS = 400
+
 
 @app.exception_handler(RequestValidationError)
 def validation_exception_handler(request, exc):
-    return JSONResponse(status_code=REQUEST_VALIDATION_ERROR_STATUS,
+    return JSONResponse(status_code=ENTITY_ERROR_STATUS,
                         content={'status': 'error', 'message': exc.errors()[0]['msg']})
+
+
+@app.exception_handler(IntegrityError)
+def sqlalchemy_exception_handler(request, exc):
+    if 'errors.UniqueViolation' in str(exc):
+        return JSONResponse(status_code=ENTITY_ERROR_STATUS,
+                            content={'status': 'error', 'message': 'Duplicate unique property detected'})
+    else:
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get('/api/questions')
@@ -136,31 +159,46 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
     answer = response['choices'][0]['message']['content']
     interaction_id = uuid.UUID(hex=str(uuid.uuid4()))
     with sqlalchemy_session.begin() as session:
-        session.add(GptInteraction(interaction_id, answer, request.username, request.company, datetime.datetime.now()))
+        session.add(GptInteraction(interaction_id, answer, request.username,
+                                   request.company,
+                                   datetime.datetime.now(ZoneInfo('Europe/Moscow'))))
         session.flush()
         session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), request.prompt))
     return {'status': 'success', 'message': 'GPT Respons successfully retrieved', 'data': {'gpt_response': answer}}
 
-@app.get('/api/favoritesPrompts')
-def get_favorite_prompts() -> FavoritePromptResponse:
+@app.get('/api/favoritePrompts')
+def get_favorite_prompts() -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
         favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
-            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).all()
-        favorite_prompts = list(map(lambda p: FavoritePromptSchema(id=p[0].id,
+            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
+        favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
                                                                   title=p[0].title,
+                                                                  date_added=p[0].date_added,
                                                                   prompt=p[1]), favorite_prompts))
     return {'status': 'success', 'message': 'Favorite prompts successfully retrieved', 'data': favorite_prompts}
 
-@app.post('/api/favoritesPrompts')
-def post_favorite_prompts(prompts: list[FavoritePromptSchema]) -> FavoritePromptResponse:
+@app.post('/api/favoritesPrompt')
+def post_favorite_prompt(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
     with sqlalchemy_session.begin() as session:
-        session.add_all(map(lambda p: FavoritePrompt(id=p.id, title=p.title), prompts))
+        date_added = datetime.datetime.now(ZoneInfo('Europe/Moscow'))
+        session.add(FavoritePrompt(id=prompt.id, title=prompt.title, date_added=date_added))
         session.flush()
-        prompt_blanks = []
-        for p in prompts:
-            prompt_blanks.extend([FavoritePromptBlank(id=uuid.UUID(hex=str(uuid.uuid4())),
-                                                         favorite_prompt_id=pb[0],
-                                                         text_data=pb[1])
-                                     for pb in zip([p.id] * len(p.prompt), p.prompt)])
-        session.add_all(prompt_blanks)
-    return {'status': 'success', 'message': 'Favorite prompts successfully saved', 'data': prompts}
+        session.add_all(list(map(lambda p: FavoritePromptBlank(uuid.UUID(hex=str(uuid.uuid4())),
+                                                          prompt.id,
+                                                          p), prompt.prompt)))
+    return {'status': 'success', 'message': 'Favorite prompt successfully saved', 'data':
+            FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)}
+
+@app.delete('/api/favoritesPrompt')
+def delete_favorite_prompt(id: uuid.UUID) -> FavoritePromptTimeResponse:
+    with sqlalchemy_session.begin() as session:
+        prompt = session.query(FavoritePrompt).filter_by(id=id).first()
+        if prompt:
+            blanks = session.query(FavoritePromptBlank.text_data).filter_by(favorite_prompt_id=id).all()
+            blanks = list(map(lambda b: b[0], blanks))
+            session.delete(prompt)
+            return {'status': 'success', 'message': 'Favorite prompt successfully deleted', 'data':
+                FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, date_added=prompt.date_added, prompt=blanks)}
+        else:
+            return JSONResponse(status_code=ENTITY_ERROR_STATUS,
+                                content={'status': 'error', 'message': "Id doesn't exist"})
