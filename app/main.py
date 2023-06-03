@@ -153,7 +153,7 @@ def get_history() -> InteractionsResponse:
     return {'status': 'success', 'message': 'History successfully retrieved', 'data': history}
 
 
-@app.post('/api/response')
+@app.put('/api/response')
 def get_response(request: GptRequestSchema) -> GptAnswerResponse:
     response = openai.ChatCompletion.create(model='gpt-4', messages=[{'role': 'user', 'content': '\n'.join(request.prompt)}])
     answer = response['choices'][0]['message']['content']
@@ -177,8 +177,8 @@ def get_favorite_prompts() -> FavoritePromptsTimeResponse:
                                                                   prompt=p[1]), favorite_prompts))
     return {'status': 'success', 'message': 'Favorite prompts successfully retrieved', 'data': favorite_prompts}
 
-@app.post('/api/favoritesPrompt')
-def post_favorite_prompt(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
+@app.put('/api/favoritePrompts')
+def post_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
     with sqlalchemy_session.begin() as session:
         date_added = datetime.datetime.now(ZoneInfo('Europe/Moscow'))
         session.add(FavoritePrompt(id=prompt.id, title=prompt.title, date_added=date_added))
@@ -189,16 +189,19 @@ def post_favorite_prompt(prompt: FavoritePromptSchema) -> FavoritePromptTimeResp
     return {'status': 'success', 'message': 'Favorite prompt successfully saved', 'data':
             FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)}
 
-@app.delete('/api/favoritesPrompt')
-def delete_favorite_prompt(id: uuid.UUID) -> FavoritePromptTimeResponse:
+@app.delete('/api/favoritePrompts')
+def delete_favorite_prompts(id: uuid.UUID) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
         prompt = session.query(FavoritePrompt).filter_by(id=id).first()
-        if prompt:
-            blanks = session.query(FavoritePromptBlank.text_data).filter_by(favorite_prompt_id=id).all()
-            blanks = list(map(lambda b: b[0], blanks))
-            session.delete(prompt)
-            return {'status': 'success', 'message': 'Favorite prompt successfully deleted', 'data':
-                FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, date_added=prompt.date_added, prompt=blanks)}
-        else:
+        if not prompt:
             return JSONResponse(status_code=ENTITY_ERROR_STATUS,
                                 content={'status': 'error', 'message': "Id doesn't exist"})
+        session.delete(prompt)
+        session.flush()
+        favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data)) \
+            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
+        favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
+                                                                       title=p[0].title,
+                                                                       date_added=p[0].date_added,
+                                                                       prompt=p[1]), favorite_prompts))
+    return {'status': 'success', 'message': 'Favorite prompt successfully deleted', 'data': favorite_prompts}
