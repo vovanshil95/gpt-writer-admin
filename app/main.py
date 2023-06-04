@@ -64,8 +64,10 @@ class GptRequestSchema(BaseModel):
     company: str
 
 class InteractionSchema(BaseModel):
+    id: uuid.UUID
     request: GptRequestSchema
     datetime: datetime.datetime
+    favorite: bool
     gpt_response: str
 
 class InteractionsResponse(BaseResponse):
@@ -87,20 +89,50 @@ app.add_middleware(
 REQUEST_VALIDATION_ERROR_STATUS = 422
 ENTITY_ERROR_STATUS = 400
 
+def get_interactions(message) -> InteractionsResponse:
+    with sqlalchemy_session.begin() as session:
+        history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data))\
+            .join(FilledPrompt).group_by(GptInteraction.id).all()
+        history = list(map(lambda el: InteractionSchema(
+            id=el[0].id,
+            request=GptRequestSchema(
+                prompt=el[1],
+                username=el[0].username,
+                company=el[0].company,
+            ),
+            datetime=el[0].time_happened,
+            favorite=el[0].favorite,
+            gpt_response=el[0].gpt_answer), history))
+    return {'status': 'success', 'message': message, 'data': history}
+
+def get_favorite_prompts_(message) -> FavoritePromptsTimeResponse:
+    with sqlalchemy_session.begin() as session:
+        favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
+            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
+        favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
+                                                                  title=p[0].title,
+                                                                  date_added=p[0].date_added,
+                                                                  prompt=p[1]), favorite_prompts))
+    return {'status': 'success', 'message': message, 'data': favorite_prompts}
 
 @app.exception_handler(RequestValidationError)
-def validation_exception_handler(request, exc):
+def validation_handler(request, exc):
     return JSONResponse(status_code=ENTITY_ERROR_STATUS,
                         content={'status': 'error', 'message': exc.errors()[0]['msg']})
 
 
 @app.exception_handler(IntegrityError)
-def sqlalchemy_exception_handler(request, exc):
+def unique_vailation_handler(request, exc):
     if 'errors.UniqueViolation' in str(exc):
         return JSONResponse(status_code=ENTITY_ERROR_STATUS,
                             content={'status': 'error', 'message': 'Duplicate unique property detected'})
     else:
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.exception_handler(AttributeError)
+def not_exist_handler(request, exc):
+    return JSONResponse(status_code=ENTITY_ERROR_STATUS,
+                        content={'status': 'error', 'message': "Id doesn't exist"})
 
 
 @app.get('/api/questions')
@@ -139,18 +171,7 @@ def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
 
 @app.get('/api/history')
 def get_history() -> InteractionsResponse:
-    with sqlalchemy_session.begin() as session:
-        history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data))\
-            .join(FilledPrompt).group_by(GptInteraction.id).all()
-        history = list(map(lambda el: InteractionSchema(
-            request=GptRequestSchema(
-                prompt=el[1],
-                username=el[0].username,
-                company=el[0].company,
-            ),
-            datetime=el[0].time_happened,
-            gpt_response=el[0].gpt_answer), history))
-    return {'status': 'success', 'message': 'History successfully retrieved', 'data': history}
+    return get_interactions('History successfully retrieved')
 
 
 @app.put('/api/response')
@@ -168,17 +189,10 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
 
 @app.get('/api/favoritePrompts')
 def get_favorite_prompts() -> FavoritePromptsTimeResponse:
-    with sqlalchemy_session.begin() as session:
-        favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
-            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
-        favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
-                                                                  title=p[0].title,
-                                                                  date_added=p[0].date_added,
-                                                                  prompt=p[1]), favorite_prompts))
-    return {'status': 'success', 'message': 'Favorite prompts successfully retrieved', 'data': favorite_prompts}
+    return get_favorite_prompts_('Favorite prompts successfully retrieved')
 
 @app.put('/api/favoritePrompts')
-def post_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
+def put_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
     with sqlalchemy_session.begin() as session:
         date_added = datetime.datetime.now(ZoneInfo('Europe/Moscow'))
         session.add(FavoritePrompt(id=prompt.id, title=prompt.title, date_added=date_added))
@@ -192,16 +206,19 @@ def post_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeRes
 @app.delete('/api/favoritePrompts')
 def delete_favorite_prompts(id: uuid.UUID) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
-        prompt = session.query(FavoritePrompt).filter_by(id=id).first()
-        if not prompt:
-            return JSONResponse(status_code=ENTITY_ERROR_STATUS,
-                                content={'status': 'error', 'message': "Id doesn't exist"})
+        prompt = session.get(FavoritePrompt, id)
+        if not prompt: raise AttributeError
         session.delete(prompt)
-        session.flush()
-        favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data)) \
-            .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
-        favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
-                                                                       title=p[0].title,
-                                                                       date_added=p[0].date_added,
-                                                                       prompt=p[1]), favorite_prompts))
-    return {'status': 'success', 'message': 'Favorite prompt successfully deleted', 'data': favorite_prompts}
+    return get_favorite_prompts_('Favorite prompt successfully deleted')
+
+@app.put('/api/favoriteHistory')
+def add_to_favorite(id: uuid.UUID)->InteractionsResponse:
+    with sqlalchemy_session.begin() as session:
+        session.get(GptInteraction, id).favorite = True
+    return get_interactions('Interaction successfully added to favorite')
+
+@app.delete('/api/favoriteHistory')
+def delete_from_favorite(id: uuid.UUID)->InteractionsResponse:
+    with sqlalchemy_session.begin() as session:
+        session.get(GptInteraction, id).favorite = False
+    return get_interactions('Interaction successfully deleted from favorite')

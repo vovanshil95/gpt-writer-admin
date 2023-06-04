@@ -1,4 +1,4 @@
-from sqlalchemy import MetaData, Table, Column, String, TIMESTAMP, ForeignKey, UUID
+from sqlalchemy import MetaData, Table, Column, String, TIMESTAMP, ForeignKey, UUID, BOOLEAN
 from sqlalchemy.orm import registry
 
 import datetime
@@ -65,10 +65,11 @@ prompt_blank = Table('prompt_blank',
 gpt_interaction = Table('gpt_interaction',
                         metadata,
                         Column('id', UUID, primary_key=True),
-                        Column('gpt_answer', String, nullable=False),
                         Column('username', String, nullable=False),
                         Column('company', String, nullable=False),
-                        Column('time_happened', TIMESTAMP, nullable=False),)
+                        Column('time_happened', TIMESTAMP, nullable=False),
+                        Column('favorite', BOOLEAN, nullable=False, server_default='False'),
+                        Column('gpt_answer', String, nullable=False),)
 
 filled_prompt = Table('filled_prompt',
                metadata,
