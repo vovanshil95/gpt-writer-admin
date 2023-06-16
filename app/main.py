@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from  sqlalchemy.exc import IntegrityError
 import openai
 
-from models.models import *
+from models.models import Match, PromptBlank, FilledPrompt, GptInteraction, FavoritePrompt, FavoritePromptBlank, Workspace
 from config import sqlalchemy_url, OPENAI_API_KEY, ORIGINS
 
 class BaseResponse(BaseModel):
@@ -73,6 +73,9 @@ class InteractionSchema(BaseModel):
 class InteractionsResponse(BaseResponse):
     data: list[InteractionSchema]
 
+class IdResponse(BaseResponse):
+    data: uuid.UUID
+
 app = FastAPI()
 
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
@@ -91,8 +94,11 @@ ENTITY_ERROR_STATUS = 400
 
 def get_interactions(message) -> InteractionsResponse:
     with sqlalchemy_session.begin() as session:
-        history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data))\
-            .join(FilledPrompt).group_by(GptInteraction.id).all()
+        history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data)) \
+            .filter(GptInteraction.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
+            .join(FilledPrompt).group_by(GptInteraction.id)\
+            .order_by(desc(GptInteraction.time_happened))\
+            .all()
         history = list(map(lambda el: InteractionSchema(
             id=el[0].id,
             request=GptRequestSchema(
@@ -108,6 +114,7 @@ def get_interactions(message) -> InteractionsResponse:
 def get_favorite_prompts_(message) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
         favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
+            .filter(FavoritePrompt.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
             .join(FavoritePromptBlank).group_by(FavoritePrompt.id).order_by(desc(FavoritePrompt.date_added)).all()
         favorite_prompts = list(map(lambda p: FavoritePromptTimeSchema(id=p[0].id,
                                                                   title=p[0].title,
@@ -138,7 +145,9 @@ def not_exist_handler(request, exc):
 @app.get('/api/questions')
 def get_questions() -> MatchResponse:
     with sqlalchemy_session.begin() as session:
-        matches = session.query(Match).all()
+        matches = session.query(Match)\
+            .filter(Match.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0])\
+            .all()
         matches = list(map(lambda m: MatchSchema(id=str(m.id),
                                                  question=m.question,
                                                  answer=m.answer,
@@ -148,15 +157,20 @@ def get_questions() -> MatchResponse:
 @app.put('/api/questions')
 def put_questions(questions: list[MatchSchema]) -> MatchResponse:
     with sqlalchemy_session.begin() as session:
-        session.query(Match).delete()
-        session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color), questions))
+        workspace_id = session.query(Workspace.id).filter(Workspace.initial).first()[0]
+        session.query(Match)\
+            .filter(Match.workspace_id == workspace_id)\
+            .delete()
+        session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color, workspace_id), questions))
     return {'status': 'success', 'message': 'Questions successfully saved', 'data': questions}
 
 
 @app.get('/api/prompt')
 def get_prompt() -> PromptsResponse:
     with sqlalchemy_session.begin() as session:
-        prompts = session.query(PromptBlank).all()
+        prompts = session.query(PromptBlank) \
+            .filter(PromptBlank.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
+            .all()
         prompts = PromptBlanksSchema(prompt=list(map(lambda q: q.text_data, prompts)))
     return {'status': 'success', 'message': 'Prompt successfully retrieved', 'data': prompts}
 
@@ -164,8 +178,9 @@ def get_prompt() -> PromptsResponse:
 @app.put('/api/prompt')
 def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
     with sqlalchemy_session.begin() as session:
-        session.query(PromptBlank).delete()
-        session.add_all(list(map(lambda pr: PromptBlank(uuid.UUID(hex=str(uuid.uuid4())), pr), prompts.prompt)))
+        workspace_id = session.query(Workspace.id).filter(Workspace.initial).first()[0]
+        session.query(PromptBlank).filter(PromptBlank.workspace_id == workspace_id).delete()
+        session.add_all(list(map(lambda pr: PromptBlank(uuid.UUID(hex=str(uuid.uuid4())), pr, workspace_id), prompts.prompt)))
     return {'status': 'success', 'message': 'Prompt successfully saved', 'data': prompts}
 
 
@@ -182,7 +197,8 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
     with sqlalchemy_session.begin() as session:
         session.add(GptInteraction(interaction_id, answer, request.username,
                                    request.company,
-                                   datetime.datetime.now(ZoneInfo('Europe/Moscow'))))
+                                   datetime.datetime.now(ZoneInfo('Europe/Moscow')),
+                                   session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
         session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), request.prompt))
     return {'status': 'success', 'message': 'GPT Respons successfully retrieved', 'data': {'gpt_response': answer}}
@@ -195,11 +211,12 @@ def get_favorite_prompts() -> FavoritePromptsTimeResponse:
 def put_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResponse:
     with sqlalchemy_session.begin() as session:
         date_added = datetime.datetime.now(ZoneInfo('Europe/Moscow'))
-        session.add(FavoritePrompt(id=prompt.id, title=prompt.title, date_added=date_added))
+        session.add(FavoritePrompt(id=prompt.id,
+                                   title=prompt.title,
+                                   date_added=date_added,
+                                   workspace_id=session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
-        session.add_all(list(map(lambda p: FavoritePromptBlank(uuid.UUID(hex=str(uuid.uuid4())),
-                                                          prompt.id,
-                                                          p), prompt.prompt)))
+        session.add_all(list(map(lambda p: FavoritePromptBlank(uuid.UUID(hex=str(uuid.uuid4())), prompt.id, p), prompt.prompt)))
     return {'status': 'success', 'message': 'Favorite prompt successfully saved', 'data':
             FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)}
 
@@ -222,3 +239,15 @@ def delete_from_favorite(id: uuid.UUID)->InteractionsResponse:
     with sqlalchemy_session.begin() as session:
         session.get(GptInteraction, id).favorite = False
     return get_interactions('Interaction successfully deleted from favorite')
+
+@app.put('/api/workspace')
+def change_workspace(workspace_id: uuid.UUID) -> IdResponse:
+    with sqlalchemy_session.begin() as session:
+        session.query(Workspace).filter(Workspace.initial).first().initial=False
+        new_workspace = session.get(Workspace, workspace_id)
+        if new_workspace is not None:
+            new_workspace.initial = True
+            return {'status': 'success', 'message': 'workspace successfully changed', 'data': workspace_id}
+        else:
+            session.add(Workspace(workspace_id, True))
+            return {'status': 'success', 'message': 'workspace successfully added and changed', 'data': workspace_id}
