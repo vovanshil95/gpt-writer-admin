@@ -74,7 +74,7 @@ prompt_blank = Table('prompt_blank',
                Column('text_data', String, nullable=False),
                Column('workspace_id', ForeignKey('workspace.id', ondelete='cascade'), nullable=False),)
 
-gpt_interaction = Table('gpt_interactions',
+gpt_interaction = Table('gpt_interaction',
                         metadata,
                         Column('id', UUID, primary_key=True),
                         Column('username', String, nullable=False),
@@ -88,7 +88,7 @@ filled_prompt = Table('filled_prompt',
                metadata,
                Column('id', UUID, primary_key=True),
                Column('text_data', String, nullable=False),
-               Column('gpt_interaction_id', UUID, ForeignKey('gpt_interactions.id', ondelete='cascade'), nullable=False),)
+               Column('gpt_interaction_id', UUID, ForeignKey('gpt_interaction.id', ondelete='cascade'), nullable=False),)
 
 favorite_prompt = Table('favorite_prompt',
                         metadata,
