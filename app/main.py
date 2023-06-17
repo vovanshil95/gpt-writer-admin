@@ -14,11 +14,8 @@ import openai
 
 from models.models import Match, PromptBlank, FilledPrompt, GptInteraction, FavoritePrompt, FavoritePromptBlank, Workspace
 from config import sqlalchemy_url, OPENAI_API_KEY, ORIGINS
-
-class BaseResponse(BaseModel):
-    status: str
-    message: str
-    data: dict
+from utils import BaseResponse
+from workspace.router import router as workspace_router
 
 class MatchSchema(BaseModel):
     id: uuid.UUID
@@ -73,9 +70,6 @@ class InteractionSchema(BaseModel):
 class InteractionsResponse(BaseResponse):
     data: list[InteractionSchema]
 
-class IdResponse(BaseResponse):
-    data: uuid.UUID
-
 app = FastAPI()
 
 sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
@@ -89,10 +83,12 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+app.include_router(workspace_router)
+
 REQUEST_VALIDATION_ERROR_STATUS = 422
 ENTITY_ERROR_STATUS = 400
 
-def get_interactions(message) -> InteractionsResponse:
+def get_interactions(message: str) -> InteractionsResponse:
     with sqlalchemy_session.begin() as session:
         history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data)) \
             .filter(GptInteraction.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
@@ -109,9 +105,9 @@ def get_interactions(message) -> InteractionsResponse:
             datetime=el[0].time_happened,
             favorite=el[0].favorite,
             gpt_response=el[0].gpt_answer), history))
-    return {'status': 'success', 'message': message, 'data': history}
+    return InteractionsResponse(status='success', message=message, data=history)
 
-def get_favorite_prompts_(message) -> FavoritePromptsTimeResponse:
+def get_favorite_prompts_(message: str) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
         favorite_prompts = session.query(FavoritePrompt, func.array_agg(FavoritePromptBlank.text_data))\
             .filter(FavoritePrompt.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
@@ -120,7 +116,7 @@ def get_favorite_prompts_(message) -> FavoritePromptsTimeResponse:
                                                                   title=p[0].title,
                                                                   date_added=p[0].date_added,
                                                                   prompt=p[1]), favorite_prompts))
-    return {'status': 'success', 'message': message, 'data': favorite_prompts}
+    return FavoritePromptsTimeResponse(status='success', message=message, data=favorite_prompts)
 
 @app.exception_handler(RequestValidationError)
 def validation_handler(request, exc):
@@ -137,9 +133,8 @@ def unique_vailation_handler(request, exc):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.exception_handler(AttributeError)
-def not_exist_handler(request, exc):
-    return JSONResponse(status_code=ENTITY_ERROR_STATUS,
-                        content={'status': 'error', 'message': "Id doesn't exist"})
+def entity_error_handler(request, exc):
+    return JSONResponse(status_code=ENTITY_ERROR_STATUS, content={'status': 'error', 'message': str(exc)})
 
 
 @app.get('/api/questions')
@@ -152,7 +147,7 @@ def get_questions() -> MatchResponse:
                                                  question=m.question,
                                                  answer=m.answer,
                                                  color=m.color), matches))
-    return {'status': 'success', 'message': 'Questions successfully retrieved', 'data': matches}
+    return MatchResponse(status='success', message='Questions successfully retrieved', data=matches)
 
 @app.put('/api/questions')
 def put_questions(questions: list[MatchSchema]) -> MatchResponse:
@@ -162,8 +157,7 @@ def put_questions(questions: list[MatchSchema]) -> MatchResponse:
             .filter(Match.workspace_id == workspace_id)\
             .delete()
         session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color, workspace_id), questions))
-    return {'status': 'success', 'message': 'Questions successfully saved', 'data': questions}
-
+    return MatchResponse(status='success', message='Questions successfully saved', data=questions)
 
 @app.get('/api/prompt')
 def get_prompt() -> PromptsResponse:
@@ -172,8 +166,7 @@ def get_prompt() -> PromptsResponse:
             .filter(PromptBlank.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
             .all()
         prompts = PromptBlanksSchema(prompt=list(map(lambda q: q.text_data, prompts)))
-    return {'status': 'success', 'message': 'Prompt successfully retrieved', 'data': prompts}
-
+    return PromptsResponse(status='success', message='Prompt successfully retrieved', data=prompts)
 
 @app.put('/api/prompt')
 def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
@@ -181,8 +174,7 @@ def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
         workspace_id = session.query(Workspace.id).filter(Workspace.initial).first()[0]
         session.query(PromptBlank).filter(PromptBlank.workspace_id == workspace_id).delete()
         session.add_all(list(map(lambda pr: PromptBlank(uuid.UUID(hex=str(uuid.uuid4())), pr, workspace_id), prompts.prompt)))
-    return {'status': 'success', 'message': 'Prompt successfully saved', 'data': prompts}
-
+    return PromptsResponse(status='success', message='Prompt successfully saved', data=prompts)
 
 @app.get('/api/history')
 def get_history() -> InteractionsResponse:
@@ -201,7 +193,8 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
                                    session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
         session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), request.prompt))
-    return {'status': 'success', 'message': 'GPT Respons successfully retrieved', 'data': {'gpt_response': answer}}
+    return GptAnswerResponse(status='success', message='GPT Response successfully retrieved', data={'gpt_response': answer})
+
 
 @app.get('/api/favoritePrompts')
 def get_favorite_prompts() -> FavoritePromptsTimeResponse:
@@ -217,14 +210,14 @@ def put_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResp
                                    workspace_id=session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
         session.add_all(list(map(lambda p: FavoritePromptBlank(uuid.UUID(hex=str(uuid.uuid4())), prompt.id, p), prompt.prompt)))
-    return {'status': 'success', 'message': 'Favorite prompt successfully saved', 'data':
-            FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)}
+        favorite_prompt = FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)
+    return FavoritePromptTimeResponse(status='success', message='Favorite prompt successfully saved', data=favorite_prompt)
 
 @app.delete('/api/favoritePrompts')
 def delete_favorite_prompts(id: uuid.UUID) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:
         prompt = session.get(FavoritePrompt, id)
-        if not prompt: raise AttributeError
+        if not prompt: raise AttributeError("Id doesn't exist")
         session.delete(prompt)
     return get_favorite_prompts_('Favorite prompt successfully deleted')
 
@@ -239,15 +232,3 @@ def delete_from_favorite(id: uuid.UUID)->InteractionsResponse:
     with sqlalchemy_session.begin() as session:
         session.get(GptInteraction, id).favorite = False
     return get_interactions('Interaction successfully deleted from favorite')
-
-@app.put('/api/workspace')
-def change_workspace(workspace_id: uuid.UUID) -> IdResponse:
-    with sqlalchemy_session.begin() as session:
-        session.query(Workspace).filter(Workspace.initial).first().initial=False
-        new_workspace = session.get(Workspace, workspace_id)
-        if new_workspace is not None:
-            new_workspace.initial = True
-            return {'status': 'success', 'message': 'workspace successfully changed', 'data': workspace_id}
-        else:
-            session.add(Workspace(workspace_id, True))
-            return {'status': 'success', 'message': 'workspace successfully added and changed', 'data': workspace_id}

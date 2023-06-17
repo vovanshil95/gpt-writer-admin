@@ -52,8 +52,9 @@ class FavoritePromptBlank:
         self.text_data = text_data
 
 class Workspace:
-    def __init__(self, id: uuid.UUID, initial: bool):
+    def __init__(self, id: uuid.UUID, title: str, initial: bool):
         self.id = id,
+        self.title = title
         self.initial = initial
 
 
@@ -103,7 +104,8 @@ favorite_prompt_blank = Table('favorite_prompt_blank',
 workspace = Table('workspace',
                   metadata,
                   Column('id', UUID, primary_key=True),
-                  Column('initial', BOOLEAN, nullable=False))
+                  Column('title', String, nullable=False, unique=True),
+                  Column('initial', BOOLEAN, nullable=False),)
 
 mapper_registry.map_imperatively(Match, match)
 mapper_registry.map_imperatively(PromptBlank, prompt_blank)
