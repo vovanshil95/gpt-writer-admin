@@ -4,6 +4,7 @@ import openai
 
 from config import sqlalchemy_url, OPENAI_API_KEY
 
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
+sql_engine = create_engine(sqlalchemy_url)
+sqlalchemy_session = sessionmaker(sql_engine)
 
 openai.api_key = OPENAI_API_KEY

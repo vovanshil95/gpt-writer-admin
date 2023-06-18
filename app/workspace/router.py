@@ -25,7 +25,9 @@ def add_edit_workspace(workspace: NewWorkspaceSchema) -> WorkspaceResponse:
     with sqlalchemy_session.begin() as session:
         old_workspace = session.get(Workspace, workspace.id)
         if old_workspace is None:
-            session.add(Workspace(id=workspace.id, title=workspace.title, initial=False))
+            session.add(Workspace(id=workspace.id,
+                                  title=workspace.title,
+                                  initial=False))
         else:
             old_workspace.title = workspace.title
     return get_workspace_list(f'workspace successfully {"edited" if old_workspace else "added"}')

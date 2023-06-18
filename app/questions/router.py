@@ -27,5 +27,10 @@ def put_questions(questions: list[MatchSchema]) -> MatchResponse:
         session.query(Match)\
             .filter(Match.workspace_id == workspace_id)\
             .delete()
-        session.add_all(map(lambda m: Match(m.id, m.question, m.answer, m.color, workspace_id), questions))
+        session.add_all(map(lambda m: Match(id=m.id,
+                                            question=m.question,
+                                            answer=m.answer,
+                                            color=m.color,
+                                            workspace_id=workspace_id),
+                            questions))
     return MatchResponse(status='success', message='Questions successfully saved', data=questions)

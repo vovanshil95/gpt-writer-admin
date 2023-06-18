@@ -44,7 +44,10 @@ def put_prompt(prompts: PromptBlanksSchema) -> PromptsResponse:
     with sqlalchemy_session.begin() as session:
         workspace_id = session.query(Workspace.id).filter(Workspace.initial).first()[0]
         session.query(PromptBlank).filter(PromptBlank.workspace_id == workspace_id).delete()
-        session.add_all(list(map(lambda pr: PromptBlank(uuid.UUID(hex=str(uuid.uuid4())), pr, workspace_id), prompts.prompt)))
+        session.add_all(list(map(lambda pr: PromptBlank(id=uuid.UUID(hex=str(uuid.uuid4())),
+                                                        text_data=pr,
+                                                        workspace_id=workspace_id),
+                                 prompts.prompt)))
     return PromptsResponse(status='success', message='Prompt successfully saved', data=prompts)
 
 
@@ -61,7 +64,10 @@ def put_favorite_prompts(prompt: FavoritePromptSchema) -> FavoritePromptTimeResp
                                    date_added=date_added,
                                    workspace_id=session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
-        session.add_all(list(map(lambda p: FavoritePromptBlank(uuid.UUID(hex=str(uuid.uuid4())), prompt.id, p), prompt.prompt)))
+        session.add_all(list(map(lambda p: FavoritePromptBlank(id=uuid.UUID(hex=str(uuid.uuid4())),
+                                                               favorite_prompt_id=prompt.id,
+                                                               text_data=p),
+                                 prompt.prompt)))
         favorite_prompt = FavoritePromptTimeSchema(id=prompt.id, title=prompt.title, prompt=prompt.prompt, date_added=date_added)
     return FavoritePromptTimeResponse(status='success', message='Favorite prompt successfully saved', data=favorite_prompt)
 

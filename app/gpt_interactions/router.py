@@ -40,12 +40,18 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
     answer = response['choices'][0]['message']['content']
     interaction_id = uuid.UUID(hex=str(uuid.uuid4()))
     with sqlalchemy_session.begin() as session:
-        session.add(GptInteraction(interaction_id, answer, request.username,
-                                   request.company,
-                                   datetime.datetime.now(ZoneInfo('Europe/Moscow')),
-                                   session.query(Workspace.id).filter(Workspace.initial).first()[0]))
+        session.add(GptInteraction(id=interaction_id,
+                                   gpt_answer=answer,
+                                   username=request.username,
+                                   favorite=False,
+                                   company=request.company,
+                                   time_happened=datetime.datetime.now(ZoneInfo('Europe/Moscow')),
+                                   workspace_id=session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
-        session.add_all(map(lambda pr: FilledPrompt(uuid.UUID(hex=str(uuid.uuid4())), pr, interaction_id), request.prompt))
+        session.add_all(map(lambda pr: FilledPrompt(id=uuid.UUID(hex=str(uuid.uuid4())),
+                                                    text_data=pr,
+                                                    gpt_interaction_id=interaction_id),
+                            request.prompt))
     return GptAnswerResponse(status='success', message='GPT Response successfully retrieved', data={'gpt_response': answer})
 
 @router.get('/history')

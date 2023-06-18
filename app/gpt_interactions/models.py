@@ -1,9 +1,29 @@
 from sqlalchemy import Column, String, TIMESTAMP, ForeignKey, UUID, BOOLEAN
 from sqlalchemy.ext.declarative import declarative_base
 
+import datetime
+import uuid
+
+from init import sql_engine
+
 Base = declarative_base()
 
 class GptInteraction(Base):
+    def __init__(self,
+                 id: uuid.UUID,
+                 username: str,
+                 company: str,
+                 time_happened: datetime.datetime,
+                 favorite: bool,
+                 gpt_answer: str,
+                 workspace_id: uuid.UUID):
+        self.id = id
+        self.username = username
+        self.company = company
+        self.time_happened = time_happened
+        self.favorite = favorite
+        self.gpt_answer = gpt_answer
+        self.workspace_id = workspace_id
     __tablename__ = 'gpt_interaction'
     id = Column(UUID, primary_key=True)
     username = Column(String, nullable=False)
@@ -14,7 +34,13 @@ class GptInteraction(Base):
     workspace_id = Column(ForeignKey('workspace.id', ondelete='cascade'), nullable=False)
 
 class FilledPrompt(Base):
+    def __init__(self, id: uuid.UUID, text_data: str, gpt_interaction_id: uuid.UUID):
+        self.id = id
+        self.text_data = text_data
+        self.gpt_interaction_id = gpt_interaction_id
     __tablename__ = 'filled_prompt'
     id = Column(UUID, primary_key=True)
     text_data = Column(String, nullable=False)
     gpt_interaction_id = Column(UUID, ForeignKey('gpt_interaction.id', ondelete='cascade'), nullable=False)
+
+Base.metadata.reflect(bind=sql_engine)
