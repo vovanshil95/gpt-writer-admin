@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, TIMESTAMP, ForeignKey, UUID, BOOLEAN
+from sqlalchemy import Column, String, TIMESTAMP, ForeignKey, UUID, BOOLEAN, Integer
 from sqlalchemy.ext.declarative import declarative_base
 
 import datetime
@@ -34,13 +34,15 @@ class GptInteraction(Base):
     workspace_id = Column(ForeignKey('workspace.id', ondelete='cascade'), nullable=False)
 
 class FilledPrompt(Base):
-    def __init__(self, id: uuid.UUID, text_data: str, gpt_interaction_id: uuid.UUID):
+    def __init__(self, id: uuid.UUID, text_data: str, gpt_interaction_id: uuid.UUID, number: int):
         self.id = id
         self.text_data = text_data
         self.gpt_interaction_id = gpt_interaction_id
+        self.number = number
     __tablename__ = 'filled_prompt'
     id = Column(UUID, primary_key=True)
     text_data = Column(String, nullable=False)
     gpt_interaction_id = Column(UUID, ForeignKey('gpt_interaction.id', ondelete='cascade'), nullable=False)
+    number = Column(Integer, nullable=False)
 
 Base.metadata.reflect(bind=sql_engine)

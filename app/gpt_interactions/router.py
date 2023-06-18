@@ -16,7 +16,9 @@ router = APIRouter(prefix='/api',
 
 def get_interactions(message: str) -> InteractionsResponse:
     with sqlalchemy_session.begin() as session:
-        history = session.query(GptInteraction, func.array_agg(FilledPrompt.text_data)) \
+        history = session.query(GptInteraction,
+                                func.array_agg(FilledPrompt.text_data),
+                                func.array_agg(FilledPrompt.number)) \
             .filter(GptInteraction.workspace_id == session.query(Workspace.id).filter(Workspace.initial).first()[0]) \
             .join(FilledPrompt).group_by(GptInteraction.id)\
             .order_by(desc(GptInteraction.time_happened))\
@@ -24,7 +26,7 @@ def get_interactions(message: str) -> InteractionsResponse:
         history = list(map(lambda el: InteractionSchema(
             id=el[0].id,
             request=GptRequestSchema(
-                prompt=el[1],
+                prompt=list(zip(*sorted(zip(el[1],el[2]), key=lambda el: el[1])))[0],
                 username=el[0].username,
                 company=el[0].company,
             ),
@@ -48,10 +50,11 @@ def get_response(request: GptRequestSchema) -> GptAnswerResponse:
                                    time_happened=datetime.datetime.now(ZoneInfo('Europe/Moscow')),
                                    workspace_id=session.query(Workspace.id).filter(Workspace.initial).first()[0]))
         session.flush()
-        session.add_all(map(lambda pr: FilledPrompt(id=uuid.UUID(hex=str(uuid.uuid4())),
+        session.add_all(map(lambda i, pr: FilledPrompt(id=uuid.UUID(hex=str(uuid.uuid4())),
                                                     text_data=pr,
-                                                    gpt_interaction_id=interaction_id),
-                            request.prompt))
+                                                    gpt_interaction_id=interaction_id,
+                                                    number=i),
+                            *zip(*enumerate(request.prompt))))
     return GptAnswerResponse(status='success', message='GPT Response successfully retrieved', data={'gpt_response': answer})
 
 @router.get('/history')
