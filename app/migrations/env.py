@@ -2,11 +2,13 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
-
 from alembic import context
 
 from config import sqlalchemy_url
-from models.models import metadata
+from gpt_interactions.models import Base as Base1
+from prompts.models import Base as Base2
+from questions.models import Base as Base3
+from workspace.models import Base as Base4
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -22,7 +24,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = metadata
+target_metadata = [Base1.metadata, Base2.metadata, Base3.metadata, Base4.metadata]
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

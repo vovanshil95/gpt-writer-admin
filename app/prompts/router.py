@@ -1,43 +1,23 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-from sqlalchemy import create_engine, func, desc
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, desc
 
 import datetime
 import uuid
 from zoneinfo import ZoneInfo
 
-from config import sqlalchemy_url
-from utils import BaseResponse
-from models.models import PromptBlank, Workspace, FavoritePromptBlank, FavoritePrompt
+from workspace.models import Workspace
+from prompts.models import PromptBlank, FavoritePromptBlank, FavoritePrompt
+from init import sqlalchemy_session
+from prompts.schemas import\
+    FavoritePromptsTimeResponse,\
+    FavoritePromptTimeSchema,\
+    PromptsResponse,\
+    FavoritePromptSchema,\
+    PromptBlanksSchema,\
+    FavoritePromptTimeResponse
 
 router = APIRouter(prefix='/api',
                    tags=['Prompts'])
-
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
-
-class PromptBlanksSchema(BaseModel):
-    prompt: list[str]
-
-class PromptsResponse(BaseResponse):
-    data: PromptBlanksSchema
-
-class FavoritePromptSchema(BaseModel):
-    id: uuid.UUID
-    title: str
-    prompt: list[str]
-
-class FavoritePromptTimeSchema(FavoritePromptSchema):
-    date_added: datetime.datetime
-
-class FavoritePromptsTimeResponse(BaseResponse):
-    data: list[FavoritePromptTimeSchema]
-
-class FavoritePromptResponse(BaseResponse):
-    data: FavoritePromptSchema
-
-class FavoritePromptTimeResponse(BaseResponse):
-    data: FavoritePromptTimeSchema
 
 def get_favorite_prompts_(message: str) -> FavoritePromptsTimeResponse:
     with sqlalchemy_session.begin() as session:

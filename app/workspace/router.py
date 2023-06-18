@@ -1,27 +1,10 @@
 from fastapi import APIRouter
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from pydantic import BaseModel
 
 import uuid
 
-from config import sqlalchemy_url
-from models.models import Workspace
-from utils import BaseResponse
-
-class WorkspaceSchema(BaseModel):
-    id: uuid.UUID
-    title: str
-    initial: bool
-
-class NewWorkspaceSchema(BaseModel):
-    id: uuid.UUID
-    title: str
-
-class WorkspaceResponse(BaseResponse):
-    data: list[WorkspaceSchema]
-
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
+from workspace.models import Workspace
+from init import  sqlalchemy_session
+from workspace.schemas import WorkspaceSchema, WorkspaceResponse, NewWorkspaceSchema
 
 router = APIRouter(prefix='/api/workspace',
                    tags=['Workspace'])

@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import RequestValidationError, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from  sqlalchemy.exc import IntegrityError
 
 from config import ORIGINS
@@ -9,6 +8,7 @@ from workspace.router import router as workspace_router
 from gpt_interactions.router import router as interactions_router
 from questions.router import router as questions_router
 from prompts.router import router as prompts_router
+from exception_handlers import validation_handler, unique_vailation_handler, entity_error_handler
 
 app = FastAPI()
 
@@ -24,24 +24,6 @@ app.include_router(workspace_router)
 app.include_router(interactions_router)
 app.include_router(questions_router)
 app.include_router(prompts_router)
-
-REQUEST_VALIDATION_ERROR_STATUS = 422
-ENTITY_ERROR_STATUS = 400
-
-@app.exception_handler(RequestValidationError)
-def validation_handler(request, exc):
-    return JSONResponse(status_code=ENTITY_ERROR_STATUS,
-                        content={'status': 'error', 'message': exc.errors()[0]['msg']})
-
-
-@app.exception_handler(IntegrityError)
-def unique_vailation_handler(request, exc):
-    if 'errors.UniqueViolation' in str(exc):
-        return JSONResponse(status_code=ENTITY_ERROR_STATUS,
-                            content={'status': 'error', 'message': 'Duplicate unique property detected'})
-    else:
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.exception_handler(AttributeError)
-def entity_error_handler(request, exc):
-    return JSONResponse(status_code=ENTITY_ERROR_STATUS, content={'status': 'error', 'message': str(exc)})
+app.add_exception_handler(RequestValidationError, validation_handler)
+app.add_exception_handler(IntegrityError, unique_vailation_handler)
+app.add_exception_handler(AttributeError, entity_error_handler)

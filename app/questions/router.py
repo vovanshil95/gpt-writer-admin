@@ -1,27 +1,12 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-import uuid
-
-from utils import BaseResponse
-from config import sqlalchemy_url
-from models.models import Workspace, Match
+from workspace.models import Workspace
+from questions.models import Match
+from init import sqlalchemy_session
+from questions.schemas import MatchSchema, MatchResponse
 
 router = APIRouter(prefix='/api/questions',
                    tags=['Questions'])
-
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
-
-class MatchSchema(BaseModel):
-    id: uuid.UUID
-    question: str
-    answer: str
-    color: str
-
-class MatchResponse(BaseResponse):
-    data: list[MatchSchema]
 
 @router.get('')
 def get_questions() -> MatchResponse:

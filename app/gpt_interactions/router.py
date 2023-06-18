@@ -1,40 +1,15 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-from sqlalchemy import create_engine, func, desc
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, desc
 import openai
 
 import uuid
 import datetime
 from zoneinfo import ZoneInfo
 
-from utils import BaseResponse
-from config import sqlalchemy_url, OPENAI_API_KEY
-from models.models import GptInteraction, FilledPrompt, Workspace
-
-sqlalchemy_session = sessionmaker(create_engine(sqlalchemy_url))
-openai.api_key = OPENAI_API_KEY
-
-class GptRequestSchema(BaseModel):
-    prompt: list[str]
-    username: str
-    company: str
-
-class GptAnswerSchema(BaseModel):
-    gpt_response: str
-
-class GptAnswerResponse(BaseResponse):
-    data: GptAnswerSchema
-
-class InteractionSchema(BaseModel):
-    id: uuid.UUID
-    request: GptRequestSchema
-    datetime: datetime.datetime
-    favorite: bool
-    gpt_response: str
-
-class InteractionsResponse(BaseResponse):
-    data: list[InteractionSchema]
+from workspace.models import Workspace
+from gpt_interactions.models import GptInteraction, FilledPrompt
+from gpt_interactions.schemas import InteractionsResponse, InteractionSchema, GptRequestSchema, GptAnswerResponse
+from init import sqlalchemy_session
 
 router = APIRouter(prefix='/api',
                    tags=['GPT Interactions'])
